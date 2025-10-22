@@ -1,0 +1,5 @@
+<?xml version="1.0" ?>
+<robot name="panda">
+    <disable_collisions link1="rl_dg_base" link2="rl_dg_1_1" reason="Default"/>
+    <disable_collisions link1="rl_dg_palm" link2="rl_dg_1_2" reason="Default"/>
+</robot>
