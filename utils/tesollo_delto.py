@@ -18,47 +18,10 @@ from mani_skill.utils.structs.pose import vectorize_pose
 
 ASSET_ROOT_DIR = "assets/tesollo_delto"
 
-MODE_CONFIGS = {
-    "dex_sim": {
-        "disable_self_collisions": True,
-        "joint_stiffness": 2e2,
-        "joint_damping": 5,
-        "joint_force_limit": 5e1,
-        "arm_joint_stiffness": 4e2,
-        "arm_joint_damping": 1e1,
-        "arm_joint_force_limit": 5e1,
-    },
-    "arm_sim": {
-        "disable_self_collisions": True,
-        "joint_stiffness": 1e2,
-        "joint_damping": 1,
-        "joint_force_limit": 5e1,
-        "arm_joint_stiffness": 2e2,
-        "arm_joint_damping": 2e1,
-        "arm_joint_force_limit": 5e1,
-    },
-    "real": {
-        "disable_self_collisions": False,
-        "joint_stiffness": 2e2,
-        "joint_damping": 5,
-        "joint_force_limit": 5e1,
-        # "arm_joint_stiffness": 4e2,
-        # "arm_joint_stiffness": 1e2,
-        "arm_joint_stiffness": 8e1,
-        "arm_joint_damping": 1e1,
-        "arm_joint_force_limit": 5e1,
-        # "arm_joint_stiffness": 1e3,
-        # "arm_joint_damping": 1e2,
-        # "arm_joint_force_limit": 1e2,
-    },
-}
-
-
 class DeltoBaseGenPop(BaseAgent):
-
     def __init__(self, *args, **kwargs):
         self.hand_dof = 20
-        # self.disable_self_collisions = True
+        self.disable_self_collisions = False
 
         # self.disable_intra_finger_contacts()
 
@@ -108,22 +71,29 @@ class DeltoBaseGenPop(BaseAgent):
 class DeltoRightGenPop(DeltoBaseGenPop):
     uid = "delto_right_gen_pop"
     urdf_path = f"{ASSET_ROOT_DIR}/urdf/dg5f_right.urdf"
+    fix_root_link = True
     urdf_config = dict(
         _materials=dict(
             finger=dict(static_friction=2.0, dynamic_friction=1.0, restitution=0.0)
         ),
+        # link={
+        #     k: dict(
+        #         material="finger", patch_radius=0.1, min_patch_radius=0.1 
+        #     )
+        #     for k in [f"rj_dg_{i}_{j}" for i in range(1, 6) for j in [1, 2, 3, 4, 'tip']]
+        # },
         link={
             k: dict(
                 material="finger", patch_radius=0.1, min_patch_radius=0.1 
             )
-            for k in [f"rj_dg_{i}_{j}" for i in range(1, 6) for j in [1, 2, 3, 4, 'tip']]
+            for k in [f"rl_dg_{i}_tip" for i in range(1, 6)]
         },
     )
     floating_base_link = "rl_dg_mount"
     palm_link = "rl_dg_palm"
     finger_tip_links = [f"rl_dg_{i}_tip" for i in range(1, 6)]
 
-    hand_link_names = [f'rl_dg_{i}_{j}' for i in range(1, 6) for j in [1, 2, 3, 4, 'tip']]
+    # hand_link_names = [f'rl_dg_{i}_{j}' for i in range(1, 6) for j in [1, 2, 3, 4, 'tip']]
     hand_joint_names = [f"rj_dg_{i}_{j}" for i in range(1, 6) for j in range(1, 5)]
 
     trans_joint_names = [
@@ -139,62 +109,33 @@ class DeltoRightGenPop(DeltoBaseGenPop):
 
     hand_init_height = 0.5
 
-    def disable_intra_finger_contacts(self):
-        thumb_links = list(filter(lambda link: link.split("_")[2] == '1', self.hand_link_names))
-        index_links = list(filter(lambda link: link.split("_")[2] == '2', self.hand_link_names))
-        middle_links = list(filter(lambda link: link.split("_")[2] == '3', self.hand_link_names))
-        ring_links = list(filter(lambda link: link.split("_")[2] == '4', self.hand_link_names))
-        pinky_links = list(filter(lambda link: link.split("_")[2] == '5', self.hand_link_names))
-        # finger_link_groups = [thumb_links + middle_links + ring_links, 
-        #                       index_links, 
-        #                       middle_links + ring_links, 
-        #                       ring_links + middle_links,
-        #                       pinky_links + middle_links + ring_links ]
-
-        # finger_link_groups = [thumb_links + index_links + middle_links +ring_links + pinky_links]
-        
-        finger_link_groups = [["rl_dg_palm", "rl_dg_base"] + thumb_links + index_links + middle_links + ring_links + pinky_links]
-        # finger_link_groups = [thumb_links, index_links, middle_links, ring_links, pinky_links]
-
-        # Assign each finger a unique bit (24-28) to disable intra-finger collisions
-        for finger_idx, finger_link_group in enumerate(finger_link_groups):
-            bit_idx = 24 + finger_idx
-            for link_name in finger_link_group:
-                link = self.robot.find_link_by_name(link_name)
-                for body in link._bodies:
-                    for cs in body.get_collision_shapes():
-                        cg = cs.get_collision_groups()
-                        cg[2] |= (1 << bit_idx)  # Set bit in contact type
-                        cg[3] &= ~(1 << bit_idx)  # Clear bit in contact affinity
-                        cs.set_collision_groups(cg)
-
     @property
     def _controller_configs(self):
         trans_pd = PDJointPosControllerConfig(
             self.trans_joint_names,
             lower=[-10, -10, -10],
             upper=[10, 10, 10],
-            stiffness=3400,
-            damping=1000,
-            force_limit=1700,
+            stiffness=2000,
+            damping=450,
+            force_limit=1000,
             normalize_action=True,
         )
         rot_pd = PDJointPosControllerConfig(
             self.rot_joint_names,
             lower=-4 * np.pi,
             upper=4 * np.pi,
-            stiffness=5000,
-            damping=900,
-            force_limit=2500,
+            stiffness=2000,
+            damping=350,
+            force_limit=1000,
             normalize_action=True,
         )
         finger_pd = PDJointPosControllerConfig(
             self.hand_joint_names,
             lower=None,
             upper=None,
-            stiffness=self.hand_dof * [80],
-            damping=self.hand_dof * [7],
-            force_limit=self.hand_dof * [100],
+            stiffness=self.hand_dof * [10],
+            damping=self.hand_dof * [0.8],
+            force_limit=self.hand_dof * [10],
             normalize_action=True,
         )
 
@@ -202,3 +143,4 @@ class DeltoRightGenPop(DeltoBaseGenPop):
             pd_joint_pos=dict(trans=trans_pd, rot=rot_pd, finger=finger_pd),
         )
         return deepcopy(controller_dict)
+
